@@ -1,5 +1,5 @@
 # Olfboost
-Learning Olfactory Mixture Similarity
+Learning Olfactory Mixture Similarity: CWYK team
 
 ## Getting started
 ### Data Preprocess
