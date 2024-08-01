@@ -91,7 +91,7 @@ def prepare_test_data(test_set_submission_df, df_percept, mixture_definitions_te
 
  
 def train_model(X, y):
-    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    kf = KFold(n_splits=10, shuffle=True, random_state=42)
     models = []
     scores = []
 
@@ -99,10 +99,43 @@ def train_model(X, y):
         X_train, X_val = X[train_index], X[test_index]
         y_train, y_val = y[train_index], y[test_index]
 
-        xgb_model = xgb.XGBRegressor(colsample_bytree=0.95, learning_rate=0.1, max_depth=9,
-                                     min_child_weight=4, n_estimators=500, reg_alpha=1.0, reg_lambda=2.0,
-                                     gamma=0.1, subsample=0.65, objective='reg:squarederror', 
-                                     tree_method='gpu_hist', verbosity=2, predictor='gpu_predictor')
+
+        # # Model 1
+        xgb_model = xgb.XGBRegressor(
+            colsample_bytree=0.85,
+            learning_rate=0.05,
+            max_depth=7,
+            min_child_weight=5,
+            n_estimators=100,
+            reg_alpha=13.2,
+            reg_lambda=12.4,
+            gamma=0.0018,
+            subsample=0.60,
+            objective='reg:squarederror',
+            tree_method='gpu_hist',
+            verbosity=2,
+            predictor='gpu_predictor'
+        )
+        # # Model 2
+        # xgb_model = xgb.XGBRegressor(
+        #     colsample_bytree=0.73,
+        #     learning_rate=0.01,
+        #     max_depth=8,
+        #     min_child_weight=3,
+        #     n_estimators=1500,
+        #     reg_alpha=10.05,
+        #     reg_lambda=28.07,
+        #     gamma=0.052,
+        #     subsample=0.98,
+        #     objective='reg:squarederror',
+        #     tree_method='gpu_hist',
+        #     verbosity=2,
+        #     predictor='gpu_predictor'
+        # ) 
+
+
+
+        
 
         xgb_model.fit(X_train, y_train)
         y_pred = xgb_model.predict(X_val)
@@ -140,14 +173,17 @@ if __name__ == "__main__":
     print("Done")
 
     print("Prepare data ... ... ", end='')
-    df_percept.drop(columns=['Prediction_28'], inplace=True)
+    df_percept.drop(columns=['Prediction_11','Prediction_18','Prediction_21','Prediction_22','Prediction_27','Prediction_28','Prediction_31','Prediction_32'], inplace=True)
     df_percept = applying_2QuantileTransformer(df_percept)
     data_percept = extract_intensity_with_top_n(data_percept, 2)
     percept_ids = [1,2,3]
     all_cids = sorted(cid_df['CID'].astype(int).tolist())
 
     print("[train] ", end='')
-    X_train, y_train = prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids, 0.00065, 0.095)
+    ## Model 1
+    X_train, y_train = prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids,0.0004, 0.152)
+    ## Model 2
+    #X_train, y_train = prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids,0.00035, 0.188)
     X_train = expand_features(X_train, data_percept, percept_ids)
     X_train = applying_PolynomialFeatures(X_train)
 
