@@ -1,6 +1,8 @@
 # Olfboost
 Learning Olfactory Mixture Similarity: CWYK team
 
+Project page: [Link](https://www.synapse.org/Synapse:syn61941777/wiki/629245)
+
 ## Getting started
 ### Data Preprocess
 ```.bash
