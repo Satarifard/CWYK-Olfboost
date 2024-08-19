@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 import joblib as jl
+import wandb
 import json
+import random
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.utils import *
 from sklearn.preprocessing import PolynomialFeatures, QuantileTransformer
@@ -90,64 +92,151 @@ def prepare_test_data(test_set_submission_df, df_percept, mixture_definitions_te
     return np.array(X_test)
 
  
-def train_model(X, y):
-    kf = KFold(n_splits=10, shuffle=True, random_state=42)
-    models = []
-    scores = []
+def train_model(training_data_df, df_percept, mixture_definitions_df, all_cids, X_t, y_t, data_percept, percept_ids):
+    sweep_config = {
+        'method': 'random',
+        'metric': {
+            'name': 'leaderboard_corr',
+            'goal': 'maximize'
+        },
+        'parameters': {
+            'n_estimators': {
+                'values': [100]  # Number of trees in the forest
+            },
+            'learning_rate': {
+                'min': 0.01,
+                'max': 0.1  # Learning rate range
+            },
+            'max_depth': {
+                'min': 7,
+                'max': 10  # Maximum depth of the tree range
+            },
+            'min_child_weight': {
+                'min': 3,
+                'max': 9  # Minimum sum of instance weight (hessian) range
+            },
+            'subsample': {
+                'min': 0.5,
+                'max': 0.9  # Subsample ratio of the training instances range
+            },
+            'colsample_bytree': {
+                'min': 0.6,
+                'max': 1.0  # Subsample ratio of columns range
+            },
+            'gamma': {
+                'min': 0.1,
+                'max': 0.4  # Minimum loss reduction range
+            },
+            'reg_lambda': {
+                'min': 1.0,
+                'max': 10.0  # L2 regularization term range
+            },
+            'reg_alpha': {
+                'min': 0.0,
+                'max': 1.0  # L1 regularization term range
+            },
+            'add_aug_val': {
+                'min': 0.000001,
+                'max': 0.0001  # Augmentation value for adding components
+            },
+            'remove_aug_val': {
+                'min': 0.01,
+                'max': 0.1  # Augmentation value for removing components
+            }
+        }
+    }
 
-    for train_index, test_index in kf.split(X):
-        X_train, X_val = X[train_index], X[test_index]
-        y_train, y_val = y[train_index], y[test_index]
+    sweep_id = wandb.sweep(sweep_config, project='d2smell')
+    best_t_mse = float('inf')  # Initialize with a very large value
+    best_t_corr = -100
+    best_params = None  # Initialize best_params
+    best_models = []
+    best_weights = []
 
+    def train():
+        nonlocal best_t_mse
+        nonlocal best_t_corr
+        nonlocal best_params
+        nonlocal best_models
+        nonlocal best_weights
 
-        # # Model 1
+        wandb.init()
+        config = wandb.config
+
         xgb_model = xgb.XGBRegressor(
-            colsample_bytree=0.85,
-            learning_rate=0.05,
-            max_depth=7,
-            min_child_weight=5,
-            n_estimators=100,
-            reg_alpha=13.2,
-            reg_lambda=12.4,
-            gamma=0.0018,
-            subsample=0.60,
             objective='reg:squarederror',
             tree_method='gpu_hist',
+            n_estimators=config.n_estimators,
+            learning_rate=config.learning_rate,
+            max_depth=config.max_depth,
+            min_child_weight=config.min_child_weight,
+            subsample=config.subsample,
+            colsample_bytree=config.colsample_bytree,
+            gamma=config.gamma,
+            reg_lambda=config.reg_lambda,
+            reg_alpha=config.reg_alpha,
             verbosity=2,
-            predictor='gpu_predictor'
+            predictor='gpu_predictor',
         )
-        # # Model 2
-        # xgb_model = xgb.XGBRegressor(
-        #     colsample_bytree=0.73,
-        #     learning_rate=0.01,
-        #     max_depth=8,
-        #     min_child_weight=3,
-        #     n_estimators=1500,
-        #     reg_alpha=10.05,
-        #     reg_lambda=28.07,
-        #     gamma=0.052,
-        #     subsample=0.98,
-        #     objective='reg:squarederror',
-        #     tree_method='gpu_hist',
-        #     verbosity=2,
-        #     predictor='gpu_predictor'
-        # ) 
 
+        X, y = prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids, config.add_aug_val, config.remove_aug_val)
+        X = expand_features(X, data_percept, percept_ids)
+        poly = PolynomialFeatures(degree=1, include_bias=False)
+        X = poly.fit_transform(X)
 
+        kf = KFold(n_splits=10, shuffle=True, random_state=42)
+        models = []
+        scores = []
 
-        
+        for train_index, test_index in kf.split(X):
+            X_train, X_val = X[train_index], X[test_index]
+            y_train, y_val = y[train_index], y[test_index]
 
-        xgb_model.fit(X_train, y_train)
-        y_pred = xgb_model.predict(X_val)
-        score = mean_squared_error(y_val, y_pred, squared=False) 
+            xgb_model.fit(X_train, y_train)
+            y_pred = xgb_model.predict(X_val)
+            score = mean_squared_error(y_val, y_pred, squared=False) 
 
-        models.append(xgb_model)
-        scores.append(score)
+            models.append(xgb_model)
+            scores.append(score)
 
-    weights = [1 / score for score in scores]
-    weights = [weight / sum(weights) for weight in weights] 
+        weights = [1 / score for score in scores]
+        weights = [weight / sum(weights) for weight in weights]
 
-    return models, weights
+        y_t_pred = predict_with_average_model(models, weights, X_t)
+        t_mse = rmse(y_t, y_t_pred)
+        t_corr = pearson_corr(y_t, y_t_pred)
+        wandb.log({'leaderboard_mse': t_mse})
+        wandb.log({'leaderboard_corr': t_corr})
+
+        if t_corr > best_t_corr:
+            best_t_mse = t_mse
+            best_t_corr = t_corr
+
+            best_params = {
+                'n_estimators': config.n_estimators,
+                'learning_rate': config.learning_rate,
+                'max_depth': config.max_depth,
+                'min_child_weight': config.min_child_weight,
+                'subsample': config.subsample,
+                'colsample_bytree': config.colsample_bytree,
+                'gamma': config.gamma,
+                'reg_lambda': config.reg_lambda,
+                'reg_alpha': config.reg_alpha,
+                'add_aug_val': config.add_aug_val,
+                'remove_aug_val': config.remove_aug_val,
+                'test_mse': t_mse,
+                'test_corr': t_corr,
+            }
+            wandb.run.summary['best_params'] = best_params
+
+            best_models = models
+            best_weights = weights
+
+    
+    wandb.agent(sweep_id, function=train, count=1000)
+    wandb.finish()
+
+    return best_models, best_weights
 
 def predict_with_average_model(models, weights, X):
     weighted_preds = np.zeros(X.shape[0])
@@ -179,27 +268,30 @@ if __name__ == "__main__":
     percept_ids = [1,2,3]
     all_cids = sorted(cid_df['CID'].astype(int).tolist())
 
-    print("[train] ", end='')
-    ## Model 1
-    X_train, y_train = prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids,0.0004, 0.152)
-    ## Model 2
-    #X_train, y_train = prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids,0.00035, 0.188)
+    print("[train data] ", end='')
+
+    X_train, y_train = prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids, 0.00065, 0.095)
     X_train = expand_features(X_train, data_percept, percept_ids)
     X_train = applying_PolynomialFeatures(X_train)
 
-    print("[leadboard] ", end='')
+    print("[leadboard data] ", end='')
     X_leaderboard = prepare_leadboard_data(leaderboard_submission_df, df_percept, mixture_definitions_leaderboard_df, all_cids)
     X_leaderboard = expand_features(X_leaderboard, data_percept, percept_ids)
     X_leaderboard = applying_PolynomialFeatures(X_leaderboard)
 
-    print("[test] ", end='')
+    true_values_ld_df = pd.read_csv('data/raw/forms/LeaderboardData_mixturedist.csv')
+    y_true = true_values_ld_df['Experimental Values'].values
+
+    print("[test data] ", end='')
     X_test = prepare_test_data(test_set_submission_df, df_percept, mixture_definitions_test_df, all_cids)
     X_test = expand_features(X_test, data_percept, percept_ids)  
     X_test = applying_PolynomialFeatures(X_test)
     print("Done")
 
     print("Training ... ... ", end='')
-    model, weight = train_model(X_train, y_train)
+    model, weight  = train_model(training_data_df, df_percept, mixture_definitions_df, all_cids, X_leaderboard, y_true, data_percept, percept_ids)
+    
+    # model, weight = train_model(X_train, y_train)
     jl.dump(model, os.path.join(path_output, 'mixture_model.pkl'))
     print("Done")
 
@@ -217,3 +309,12 @@ if __name__ == "__main__":
     test_set_submission_df.to_csv(test_set_submission_output_path, index=False)
     print("Done")
     
+# ==================================================================================================================
+
+    true_values_ld_df = pd.read_csv('data/raw/forms/LeaderboardData_mixturedist.csv')
+    y_true = true_values_ld_df['Experimental Values'].values
+    rmse_value = rmse(y_true, y_leaderboard_pred)
+    pearson_corr_value = pearson_corr(y_true, y_leaderboard_pred)
+    print(f'Leaderboard RMSE: {rmse_value}')
+    print(f'Leaderboard Pearson Correlation: {pearson_corr_value}')
+
