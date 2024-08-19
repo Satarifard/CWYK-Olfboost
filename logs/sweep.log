@@ -1,4 +1,4 @@
-Mon Aug 19 09:27:23 2024       
+Mon Aug 19 10:05:02 2024       
 +---------------------------------------------------------------------------------------+
 | NVIDIA-SMI 535.183.06             Driver Version: 535.183.06   CUDA Version: 12.2     |
 |-----------------------------------------+----------------------+----------------------+
@@ -6,8 +6,8 @@ Mon Aug 19 09:27:23 2024
 | Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
 |                                         |                      |               MIG M. |
 |=========================================+======================+======================|
-|   0  NVIDIA A100-SXM4-40GB          On  | 00000000:07:00.0 Off |                    0 |
-| N/A   31C    P0              51W / 400W |      0MiB / 40960MiB |      0%      Default |
+|   0  NVIDIA A100-SXM4-40GB          On  | 00000000:BD:00.0 Off |                    0 |
+| N/A   27C    P0              52W / 400W |      0MiB / 40960MiB |      0%      Default |
 |                                         |                      |             Disabled |
 +-----------------------------------------+----------------------+----------------------+
                                                                                          
@@ -63,4 +63,3 @@ https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environme
 
 
 
-python3: can't open file '/proj/memorization/wenjie/CWYK-Olfboost/train/train/mixture_regressor.py.py': [Errno 2] No such file or directory

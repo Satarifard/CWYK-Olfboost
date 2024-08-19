@@ -12,4 +12,4 @@ nvidia-smi
 module load Anaconda/2021.05-nsc1
 conda activate olf
 
-python3 train/mixture_regressor.py.py  
+python3 train/mixture_regressor.py.
