@@ -1,4 +1,4 @@
-Mon Aug 19 10:05:02 2024       
+Mon Aug 19 10:05:22 2024       
 +---------------------------------------------------------------------------------------+
 | NVIDIA-SMI 535.183.06             Driver Version: 535.183.06   CUDA Version: 12.2     |
 |-----------------------------------------+----------------------+----------------------+
@@ -63,3 +63,4 @@ https://docs.conda.io/projects/conda/en/latest/user-guide/tasks/manage-environme
 
 
 
+python3: can't open file '/proj/memorization/wenjie/CWYK-Olfboost/train/mixture_regressor.py.': [Errno 2] No such file or directory
