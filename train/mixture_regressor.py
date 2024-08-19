@@ -233,7 +233,7 @@ def train_model(training_data_df, df_percept, mixture_definitions_df, all_cids, 
             best_weights = weights
 
     
-    wandb.agent(sweep_id, function=train, count=1000)
+    wandb.agent(sweep_id, function=train, count=100)
     wandb.finish()
 
     return best_models, best_weights
