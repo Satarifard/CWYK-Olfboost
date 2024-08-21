@@ -224,8 +224,7 @@ if __name__ == "__main__":
     print("Prepare data ... ... ", end='')
     df_percept.drop(columns=['Prediction_11','Prediction_18','Prediction_21','Prediction_22','Prediction_27','Prediction_28','Prediction_31','Prediction_32'], inplace=True)
     df_percept = applying_2QuantileTransformer(df_percept)
-    data_percept = extract_intensity_with_top_n(data_percept, 2)
-    percept_ids = [1,2,3]
+    percept_ids = list(range(1, data_percept.shape[1]))
     all_cids = sorted(cid_df['CID'].astype(int).tolist())
 
     print("[leadboard data] ", end='')
