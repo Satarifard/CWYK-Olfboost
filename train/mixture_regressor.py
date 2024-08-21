@@ -4,53 +4,73 @@ import numpy as np
 import pandas as pd
 import xgboost as xgb
 import joblib as jl
-import wandb
-import json
-import random
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.utils import *
-from sklearn.preprocessing import PolynomialFeatures, QuantileTransformer
+from sklearn.preprocessing import PolynomialFeatures
 from sklearn.model_selection import KFold
+import optuna
 
 
-def prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids, add_aug_val, remove_aug_val):
-    def get_features(dataset, mixture):
-        return df_percept.loc[(df_percept['Dataset'] == dataset) & (df_percept['Mixture Label'] == mixture), 'Prediction_1':].to_numpy().flatten()
+seed = 3407 # https://arxiv.org/abs/2109.08203 
 
-    def append_vectors(X, y, vec1, vec2, exp_value):
-        combined_vector = np.concatenate([vec1, vec2, z])
-        X.append(combined_vector)
-        y.append(exp_value)
 
-    X = []
-    y = []
+def prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids):
+    df_percept_reduced = df_percept.set_index(['Dataset', 'Mixture Label'])
 
-    for _, row in training_data_df.iterrows():
-        dataset, mixture1, mixture2, exp_value = row['Dataset'], row['Mixture 1'], row['Mixture 2'], row['Experimental Values']
-        
-        feature_1 = get_features(dataset, mixture1)
-        feature_2 = get_features(dataset, mixture2)
-        z = (feature_1 - feature_2) ** 2
-        mixture1_vector = prepare_binary_vector(mixture_definitions_df[mixture_definitions_df['Dataset'] == dataset], all_cids, mixture1)
-        mixture2_vector = prepare_binary_vector(mixture_definitions_df[mixture_definitions_df['Dataset'] == dataset], all_cids, mixture2)
-        
-        append_vectors(X, y, mixture1_vector, mixture2_vector, exp_value)
-        append_vectors(X, y, mixture2_vector, mixture1_vector, exp_value)
+    training_data_df = training_data_df.merge(
+        df_percept_reduced.add_suffix('_1'), 
+        left_on=['Dataset', 'Mixture 1'], 
+        right_index=True
+    ).merge(
+        df_percept_reduced.add_suffix('_2'), 
+        left_on=['Dataset', 'Mixture 2'], 
+        right_index=True
+    )
 
-        new_mix1_list, new_exp_val_list = data_aug_add(mixture1_vector, mixture2_vector, exp_value, add_aug_val, [1])
-        for mix1, new_exp_val in zip(new_mix1_list, new_exp_val_list):
-            append_vectors(X, y, mix1, mixture2_vector, new_exp_val)
+    feature_columns_1 = df_percept.columns[2:] + '_1'
+    feature_columns_2 = df_percept.columns[2:] + '_2'
+    z = (training_data_df[feature_columns_1].values - training_data_df[feature_columns_2].values) ** 2
 
-        new_mix2_list, new_exp_val_list = data_aug_add(mixture2_vector, mixture1_vector, exp_value, add_aug_val, [1])
-        for mix2, new_exp_val in zip(new_mix2_list, new_exp_val_list):
-            append_vectors(X, y, mix2, mixture1_vector, new_exp_val)
+    def get_binary_vector_mapping(mixture_definitions_df, all_cids):
+        vector_map = {}
+        for _, row in mixture_definitions_df.iterrows():
+            mixture_id = row['Mixture Label']
+            components = row.iloc[2:].dropna().astype(int)
+            binary_vector = np.isin(all_cids, components)
+            vector_map[(row['Dataset'], mixture_id)] = binary_vector.astype(float)
+        return vector_map
 
-        new_mix1_remove_list, new_mix2_remove_list, new_exp_val_remove_list = data_aug_remove(mixture1_vector, mixture2_vector, exp_value, remove_aug_val, [1])
-        for new_mix1, new_mix2, new_exp_val in zip(new_mix1_remove_list, new_mix2_remove_list, new_exp_val_remove_list):
-            append_vectors(X, y, new_mix1, new_mix2, new_exp_val)
-            append_vectors(X, y, new_mix2, new_mix1, new_exp_val)
+    vector_mapping = get_binary_vector_mapping(mixture_definitions_df, all_cids)
 
-    return np.array(X), np.array(y)
+    training_data_df['mixture1_vector'] = training_data_df.apply(
+        lambda row: vector_mapping[(row['Dataset'], row['Mixture 1'])], axis=1)
+    training_data_df['mixture2_vector'] = training_data_df.apply(
+        lambda row: vector_mapping[(row['Dataset'], row['Mixture 2'])], axis=1)
+    
+    X = np.hstack([
+        np.hstack(training_data_df['mixture1_vector'].values).reshape(len(training_data_df), -1),
+        np.hstack(training_data_df['mixture2_vector'].values).reshape(len(training_data_df), -1),
+        z
+    ])
+
+    return training_data_df, X
+
+
+def prepare_training_data_aug(training_data_df, add_aug_val, remove_aug_val):
+    def adjust_exp_value(row, add_aug_val):
+        if row['augmentation_Action'] == 'add_1-2' or row['augmentation_Action'] == 'add_2-1':
+            return row['Experimental Values'] - add_aug_val
+        elif row['augmentation_Action'] == 'remove_1-2':
+            return row['Experimental Values'] + remove_aug_val
+        else:
+            return row['Experimental Values']
+
+    training_data_df['Adjusted_Exp_Values'] = training_data_df.apply(
+        adjust_exp_value, axis=1, add_aug_val=add_aug_val)
+    
+    y = training_data_df['Adjusted_Exp_Values'].values
+
+    return y
 
 
 def prepare_leadboard_data(leaderboard_submission_df, df_percept, mixture_definitions_leaderboard_df, all_cids):
@@ -93,98 +113,55 @@ def prepare_test_data(test_set_submission_df, df_percept, mixture_definitions_te
 
  
 def train_model(training_data_df, df_percept, mixture_definitions_df, all_cids, X_t, y_t, data_percept, percept_ids):
-    sweep_config = {
-        'method': 'random',
-        'metric': {
-            'name': 'leaderboard_corr',
-            'goal': 'maximize'
-        },
-        'parameters': {
-            'n_estimators': {
-                'values': [100]  # Number of trees in the forest
-            },
-            'learning_rate': {
-                'min': 0.01,
-                'max': 0.1  # Learning rate range
-            },
-            'max_depth': {
-                'min': 7,
-                'max': 10  # Maximum depth of the tree range
-            },
-            'min_child_weight': {
-                'min': 3,
-                'max': 9  # Minimum sum of instance weight (hessian) range
-            },
-            'subsample': {
-                'min': 0.5,
-                'max': 0.9  # Subsample ratio of the training instances range
-            },
-            'colsample_bytree': {
-                'min': 0.6,
-                'max': 1.0  # Subsample ratio of columns range
-            },
-            'gamma': {
-                'min': 0.1,
-                'max': 0.4  # Minimum loss reduction range
-            },
-            'reg_lambda': {
-                'min': 1.0,
-                'max': 10.0  # L2 regularization term range
-            },
-            'reg_alpha': {
-                'min': 0.0,
-                'max': 1.0  # L1 regularization term range
-            },
-            'add_aug_val': {
-                'min': 0.000001,
-                'max': 0.0001  # Augmentation value for adding components
-            },
-            'remove_aug_val': {
-                'min': 0.01,
-                'max': 0.1  # Augmentation value for removing components
-            }
-        }
-    }
-
-    sweep_id = wandb.sweep(sweep_config, project='d2smell')
-    best_t_mse = float('inf')  # Initialize with a very large value
+    best_t_mse = 100
     best_t_corr = -100
-    best_params = None  # Initialize best_params
     best_models = []
     best_weights = []
 
-    def train():
+    all_df, X = prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids)
+    X = expand_features(X, data_percept, percept_ids)
+    poly = PolynomialFeatures(degree=1, include_bias=False)
+    X = poly.fit_transform(X)
+
+    def objective(trial):
         nonlocal best_t_mse
         nonlocal best_t_corr
-        nonlocal best_params
         nonlocal best_models
         nonlocal best_weights
 
-        wandb.init()
-        config = wandb.config
+        params = {
+            'n_estimators': trial.suggest_int('n_estimators', 100, 200),
+            'learning_rate': trial.suggest_float('learning_rate', 0.0001, 0.1),
+            'max_depth': trial.suggest_int('max_depth', 6, 14),
+            'min_child_weight': trial.suggest_float('min_child_weight', 6, 11),
+            'subsample': trial.suggest_float('subsample', 0.3, 1.0),
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
+            'gamma': trial.suggest_float('gamma', 0.0, 0.4),
+            'reg_lambda': trial.suggest_float('reg_lambda', 0.1, 10.0),
+            'reg_alpha': trial.suggest_float('reg_alpha', 0.0, 1.0),
+            'add_aug_val': trial.suggest_float('add_aug_val', 0.000001, 0.001),
+            'remove_aug_val': trial.suggest_float('remove_aug_val', 0.001, 0.1)
+        }
 
         xgb_model = xgb.XGBRegressor(
             objective='reg:squarederror',
             tree_method='gpu_hist',
-            n_estimators=config.n_estimators,
-            learning_rate=config.learning_rate,
-            max_depth=config.max_depth,
-            min_child_weight=config.min_child_weight,
-            subsample=config.subsample,
-            colsample_bytree=config.colsample_bytree,
-            gamma=config.gamma,
-            reg_lambda=config.reg_lambda,
-            reg_alpha=config.reg_alpha,
+            n_estimators=params['n_estimators'],
+            learning_rate=params['learning_rate'],
+            max_depth=params['max_depth'],
+            min_child_weight=params['min_child_weight'],
+            subsample=params['subsample'],
+            colsample_bytree=params['colsample_bytree'],
+            gamma=params['gamma'],
+            reg_lambda=params['reg_lambda'],
+            reg_alpha=params['reg_alpha'],
             verbosity=2,
             predictor='gpu_predictor',
         )
 
-        X, y = prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids, config.add_aug_val, config.remove_aug_val)
-        X = expand_features(X, data_percept, percept_ids)
-        poly = PolynomialFeatures(degree=1, include_bias=False)
-        X = poly.fit_transform(X)
-
-        kf = KFold(n_splits=10, shuffle=True, random_state=42)
+        y = prepare_training_data_aug(all_df, params['add_aug_val'], params['remove_aug_val'])
+        
+        kf = KFold(n_splits=10, shuffle=True, random_state=seed)
         models = []
         scores = []
 
@@ -203,40 +180,20 @@ def train_model(training_data_df, df_percept, mixture_definitions_df, all_cids, 
         weights = [weight / sum(weights) for weight in weights]
 
         y_t_pred = predict_with_average_model(models, weights, X_t)
-        t_mse = rmse(y_t, y_t_pred)
         t_corr = pearson_corr(y_t, y_t_pred)
-        wandb.log({'leaderboard_mse': t_mse})
-        wandb.log({'leaderboard_corr': t_corr})
 
         if t_corr > best_t_corr:
-            best_t_mse = t_mse
             best_t_corr = t_corr
-
-            best_params = {
-                'n_estimators': config.n_estimators,
-                'learning_rate': config.learning_rate,
-                'max_depth': config.max_depth,
-                'min_child_weight': config.min_child_weight,
-                'subsample': config.subsample,
-                'colsample_bytree': config.colsample_bytree,
-                'gamma': config.gamma,
-                'reg_lambda': config.reg_lambda,
-                'reg_alpha': config.reg_alpha,
-                'add_aug_val': config.add_aug_val,
-                'remove_aug_val': config.remove_aug_val,
-                'test_mse': t_mse,
-                'test_corr': t_corr,
-            }
-            wandb.run.summary['best_params'] = best_params
-
             best_models = models
             best_weights = weights
 
-    
-    wandb.agent(sweep_id, function=train, count=100)
-    wandb.finish()
+        return t_corr  # Maximize correlation
+
+    study = optuna.create_study(direction='maximize', sampler=optuna.samplers.TPESampler(seed=seed))
+    study.optimize(objective, n_trials=20)
 
     return best_models, best_weights
+
 
 def predict_with_average_model(models, weights, X):
     weighted_preds = np.zeros(X.shape[0])
@@ -247,18 +204,21 @@ def predict_with_average_model(models, weights, X):
     
     return weighted_preds
 
+
 if __name__ == "__main__":
+    
     print("Load data ... ... ", end='')
     path_output = 'output'
     cid_df = pd.read_csv('data/processed/CID.csv', header=[0])
     data_percept = pd.read_csv('output/percept_scaled.csv')
-    training_data_df = pd.read_csv('data/raw/forms/TrainingData_mixturedist.csv')
-    mixture_definitions_df = pd.read_csv('data/raw/mixtures/Mixure_Definitions_Training_set_VS2_without_leaderboard.csv')
+    training_data_df = pd.read_csv('data/processed/gt_with_dataset_V2_augmented_dataset.csv')
+    mixture_definitions_df = pd.read_csv('data/processed/Mixure_Definitions_augmented_dataset.csv')
     leaderboard_submission_df = pd.read_csv('data/raw/forms/Leaderboard_set_Submission_form.csv')
     mixture_definitions_leaderboard_df = pd.read_csv('data/raw/mixtures/Mixure_Definitions_Training_set_VS2_with_leaderboard.csv')
     test_set_submission_df = pd.read_csv('data/raw/forms/Test_set_Submission_form.csv')
     mixture_definitions_test_df = pd.read_csv('data/raw/mixtures/Mixure_Definitions_test_set.csv')
-    df_percept = pd.read_csv('data/processed/predictions_separated.csv')
+    df_percept = pd.read_csv('data/processed/predictions_separated_mean_33_Augmentation_Dataset.csv')
+    true_values_ld_df = pd.read_csv('data/raw/forms/LeaderboardData_mixturedist.csv')
     print("Done")
 
     print("Prepare data ... ... ", end='')
@@ -268,18 +228,10 @@ if __name__ == "__main__":
     percept_ids = [1,2,3]
     all_cids = sorted(cid_df['CID'].astype(int).tolist())
 
-    print("[train data] ", end='')
-
-    X_train, y_train = prepare_training_data(training_data_df, df_percept, mixture_definitions_df, all_cids, 0.00065, 0.095)
-    X_train = expand_features(X_train, data_percept, percept_ids)
-    X_train = applying_PolynomialFeatures(X_train)
-
     print("[leadboard data] ", end='')
     X_leaderboard = prepare_leadboard_data(leaderboard_submission_df, df_percept, mixture_definitions_leaderboard_df, all_cids)
     X_leaderboard = expand_features(X_leaderboard, data_percept, percept_ids)
     X_leaderboard = applying_PolynomialFeatures(X_leaderboard)
-
-    true_values_ld_df = pd.read_csv('data/raw/forms/LeaderboardData_mixturedist.csv')
     y_true = true_values_ld_df['Experimental Values'].values
 
     print("[test data] ", end='')
@@ -290,8 +242,6 @@ if __name__ == "__main__":
 
     print("Training ... ... ", end='')
     model, weight  = train_model(training_data_df, df_percept, mixture_definitions_df, all_cids, X_leaderboard, y_true, data_percept, percept_ids)
-    
-    # model, weight = train_model(X_train, y_train)
     jl.dump(model, os.path.join(path_output, 'mixture_model.pkl'))
     print("Done")
 
@@ -300,6 +250,12 @@ if __name__ == "__main__":
     leaderboard_submission_df['Predicted_Experimental_Values'] = y_leaderboard_pred
     submission_output_path = os.path.join(path_output, 'Leaderboard_set_Submission_form.csv')
     leaderboard_submission_df.to_csv(submission_output_path, index=False)
+    true_values_ld_df = pd.read_csv('data/raw/forms/LeaderboardData_mixturedist.csv')
+    y_true = true_values_ld_df['Experimental Values'].values
+    rmse_value = rmse(y_true, y_leaderboard_pred)
+    pearson_corr_value = pearson_corr(y_true, y_leaderboard_pred)
+    print(f'Leaderboard RMSE: {rmse_value}')
+    print(f'Leaderboard Pearson Correlation: {pearson_corr_value}')
     print("Done")
 
     print("Inference [test] ... ... ", end='')
@@ -308,13 +264,3 @@ if __name__ == "__main__":
     test_set_submission_output_path = os.path.join(path_output, 'Test_set_Submission_form.csv')
     test_set_submission_df.to_csv(test_set_submission_output_path, index=False)
     print("Done")
-    
-# ==================================================================================================================
-
-    true_values_ld_df = pd.read_csv('data/raw/forms/LeaderboardData_mixturedist.csv')
-    y_true = true_values_ld_df['Experimental Values'].values
-    rmse_value = rmse(y_true, y_leaderboard_pred)
-    pearson_corr_value = pearson_corr(y_true, y_leaderboard_pred)
-    print(f'Leaderboard RMSE: {rmse_value}')
-    print(f'Leaderboard Pearson Correlation: {pearson_corr_value}')
-

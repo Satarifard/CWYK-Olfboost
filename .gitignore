@@ -1,0 +1,4 @@
+.vscode/*
+wandb/*
+*/__pycache__/*
+output/
