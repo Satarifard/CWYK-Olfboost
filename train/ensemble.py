@@ -32,7 +32,7 @@ def predict_with_ensemble(models_and_weights, X):
         for model, weight in zip(model_list, weight_list):
             sub_predictions += model.predict(X) * weight
         
-        predictions[i] = sub_predictions / len(model_list)
+        predictions[i] = sub_predictions
 
     return np.mean(predictions, axis=0)
 
