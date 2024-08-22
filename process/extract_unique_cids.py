@@ -10,7 +10,7 @@ path_mixture = 'data/raw/mixtures'
 path_processed = 'data/processed'
 
 
-file_path = osp.join(path_mixture, 'Mixure_Definitions_Training_set_VS2_with_leaderboard.csv')
+file_path = osp.join(path_mixture, 'Mixure_Definitions_Training_set_VS2.csv')
    
 df = pd.read_csv(file_path)
 # Extracting all CID columns and combining them into a single series

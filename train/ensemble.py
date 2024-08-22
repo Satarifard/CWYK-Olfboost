@@ -86,7 +86,7 @@ if __name__ == "__main__":
     training_data_df = pd.read_csv('data/processed/gt_with_dataset_V2_augmented_dataset.csv')
     mixture_definitions_df = pd.read_csv('data/processed/Mixure_Definitions_augmented_dataset.csv')
     leaderboard_submission_df = pd.read_csv('data/raw/forms/Leaderboard_set_Submission_form.csv')
-    mixture_definitions_leaderboard_df = pd.read_csv('data/raw/mixtures/Mixure_Definitions_Training_set_VS2_with_leaderboard.csv')
+    mixture_definitions_leaderboard_df = pd.read_csv('data/raw/mixtures/Mixure_Definitions_Training_set_VS2.csv')
     test_set_submission_df = pd.read_csv('data/raw/forms/Test_set_Submission_form.csv')
     mixture_definitions_test_df = pd.read_csv('data/raw/mixtures/Mixure_Definitions_test_set.csv')
     df_percept = pd.read_csv('data/processed/predictions_separated_mean_33_Augmentation_Dataset.csv')

@@ -19,5 +19,13 @@ python train/percept_regressor.py
 python train/mixture_regressor.py
 ```
 
+### Ensemble Models
+```.bash
+sh scripts/generate_batch.sh
+sbatch scripts/ensemble_train.sh
+sbatch scripts/ensemble.sh
+```
+
+
 ### Pretrained Models
 The pretrained models are located at ./pretrained. 
