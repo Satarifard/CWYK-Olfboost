@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #SBATCH -A berzelius-2024-123
-#SBATCH -t 0-1:0:0
+#SBATCH -t 0-11:0:0
 #SBATCH --gres gpu:1
 #SBATCH --mail-type "BEGIN,END,FAIL"
 #SBATCH --mail-user "yinw@kth.se"
