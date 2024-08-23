@@ -1,4 +1,4 @@
-## Steps to Generate the 33-Label Odor-Pair Model
+## Steps to Generate the 33-Label Odor-Pair Model and Mixture Prediction File
 
 1. **Download the Odor-Pair Script:**  
    Clone or download the odor-pair script from the following repository:  
