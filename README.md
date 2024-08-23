@@ -9,6 +9,10 @@ Project page: [Link](https://www.synapse.org/Synapse:syn61941777/wiki/629245)
 sh scripts/scripts/process_data.sh
 ```
 
+### Data Augmentation
+Please follow the instruction in this [page](https://www.synapse.org/Synapse:syn61941777/wiki/629245](https://github.com/Satarifard/CWYK-Olfboost/tree/main/augmentation)
+
+
 ### Train and Inference of Precept Regressor
 ```.bash
 python train/percept_regressor.py
