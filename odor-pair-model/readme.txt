@@ -1,8 +1,16 @@
-To generate the 33-label odor-pair model, the following steps must be taken:
-1- Download the odor-pair script from https://github.com/odor-pair/odor-pair
-2- Train the 33 odor-pair models (the pre-trained model and the list of labels and AUROC are available in the current folder, model_33.pt and labels.csv)
-3- To test the performance of the model use "ModelPerformance.ipynb" notebook.
-4- To generate 33 label odor-pair for any mixture use "33label_mixture_prediction.ipynb" notebook.
+## Steps to Generate the 33-Label Odor-Pair Model
 
+1. **Download the Odor-Pair Script:**  
+   Clone or download the odor-pair script from the following repository:  
+   [https://github.com/odor-pair/odor-pair](https://github.com/odor-pair/odor-pair)
 
-Original paper: https://arxiv.org/html/2312.16124v1 and 
+2. **Train the 33 Odor-Pair Models:**  
+   Train the models using the provided script. Pre-trained models (`model_33.pt`) and the corresponding labels list (`labels.csv`) are available in the current directory. The AUROC values for each model are also provided.
+
+3. **Test Model Performance:**  
+   To evaluate the performance of the model, use the `ModelPerformance.ipynb` notebook included in this repository.
+
+4. **Generate 33-Label Odor-Pair Predictions for Mixtures:**  
+   For generating 33-label odor-pair predictions for any mixture, use the `33label_mixture_prediction.ipynb` notebook.
+
+For more details, please refer to the [original paper](https://arxiv.org/html/2312.16124v1).
