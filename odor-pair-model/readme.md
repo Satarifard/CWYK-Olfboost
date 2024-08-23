@@ -3,7 +3,7 @@
 1. **Download the Odor-Pair Script:**  
    Clone or download the odor-pair script from the following repository:  
    [https://github.com/odor-pair/odor-pair](https://github.com/odor-pair/odor-pair)
-   The version used to generate this model is included in this directory `odor-pair-main.zip`
+   (The version used to generate this model is included in this directory `odor-pair-main.zip`)
 3. **Train the 33 Odor-Pair Models:**  
    Train the models using the provided script. Pre-trained models (`model_33.pt`) and the corresponding labels list (`labels.csv`) are available in the current directory. The AUROC values for each model are also provided.
 
