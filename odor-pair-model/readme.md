@@ -13,4 +13,4 @@
 5. **Generate 33-Label Odor-Pair Predictions for Mixtures:**  
    For generating 33-label odor-pair predictions for any mixture, use the `33label_mixture_prediction.ipynb` notebook.
 
-For more details, please refer to the [original paper](https://arxiv.org/html/2312.16124v1).
+For more details, please refer to the [original paper]([https://arxiv.org/html/2312.16124v1](https://arxiv.org/abs/2312.16124)).
