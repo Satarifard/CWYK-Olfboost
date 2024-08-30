@@ -1,5 +1,5 @@
 # Olfboost
-Learning Olfactory Mixture Similarity: CWYK team
+Learning Olfactory Mixture Similarity: D2Smell team
 
 Project page: [Link](https://www.synapse.org/Synapse:syn61941777/wiki/629245)
 
