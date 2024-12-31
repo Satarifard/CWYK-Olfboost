@@ -126,25 +126,55 @@ def data_aug_remove(mix1, mix2, exp_val, aug_val, aug_num_list):
     return new_mix1_list, new_mix2_list, new_exp_val_list
 
 
-def expand_features(X, feature_matrix, ids):
-
+def expand_features(X, feature_matrix, ids, feature_names=None):
     pred_features_length = predictions_separated_num*2
     X_p = X[:, -pred_features_length:]
     X = X[:, :-pred_features_length]
-
+    
+    print(f"Original X shape (without predictions): {X.shape}")
+    print(f"Predictions shape: {X_p.shape}")
+    
     features = feature_matrix.values
     features = features[:,ids]
+    print(f"Feature matrix shape: {features.shape}")
     
     n_samples, n_features = X.shape
     n_id = int(n_features/2)
-    
     id_length = len(ids)
-
+    
+    print(f"Number of components per mixture (n_id): {n_id}")
+    print(f"Number of features per component (id_length): {id_length}")
+    
     new_n_features = n_features + n_features * id_length
+    print(f"New feature count (before predictions): {new_n_features}")
+    
     expanded_X = np.zeros((n_samples, new_n_features))
     
     expanded_X[:, :n_features] = X
     
+    # Create column names
+    column_names = []
+    
+    # 1. Binary mixture features (original X matrix)
+    n_components = X.shape[1]  # 369
+    mix1_binary = [f'Mix1_Component_{i+1}' for i in range(n_components)]
+    
+    # 2. Expanded features
+    if feature_names is None:
+        feature_names = [f'Feature_{i+1}' for i in range(id_length)]
+    
+    expanded_features = []
+    for i in range(n_components):
+        for feat in feature_names:
+            expanded_features.append(f'Mix_Comp{i+1}_{feat}')
+    
+    # 3. Prediction features
+    prediction_features = [f'Prediction_{i+1}' for i in range(pred_features_length)]
+    
+    # Combine all feature names
+    column_names = mix1_binary + expanded_features + prediction_features
+
+    # Rest of the original function
     for j in range(n_id):
         indices = np.where(X[:, j] == 1)[0]
         expanded_X[indices, n_features + j * id_length: n_features + (j + 1) * id_length] = features[j]
@@ -154,7 +184,11 @@ def expand_features(X, feature_matrix, ids):
         expanded_X[indices, n_features + n_id * id_length + j * id_length: n_features + n_id * id_length + (j + 1) * id_length] = features[j]
     
     expanded_X = np.concatenate([expanded_X, X_p], axis=1)
-    return expanded_X
+    print(f"Final shape (with predictions): {expanded_X.shape}")
+    
+    # Convert to DataFrame with column names
+    expanded_df = pd.DataFrame(expanded_X, columns=column_names)
+    return expanded_df
 
 
 def applying_2QuantileTransformer(df):
