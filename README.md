@@ -1,18 +1,15 @@
 # Learning Odor Quality Across Concentrations and Mixtures
 
-Project page: [Link]([https://www.synapse.org/Synapse:syn61941777/wiki/629245](https://www.synapse.org/Synapse:syn68843684/wiki/633856))
+Project page: [Link]([https://www.synapse.org/Synapse:syn61941777/wiki/629245])
 
-Vahid Satarifard ^ 1 ^, Laura Sisson ^ 2 ^
+Vahid Satarifard ^1^, Laura Sisson ^2^
 
 1 – Yale Institute for Network Science, Yale University, New Haven, CT, USA
 2 – Department of Computer Science, Boston University, Boston, MA, USA
-* Equal Contribution
 
-emails: vahid.satarifard@yale.edu; laura.h.sisson@gmail.com
 
-Our submission is public as part of the challenge archive, the source code is available at: https://github.com
 
-## Summary Sentence
+## Summary
 For Task 1, we train CatBoost via Optuna using Mordred-Morgan descriptors, dilutions, and flags to predict odor perception across concentrations. For Task 2, we fine-tune a graph neural network pre-trained on aroma-chemical pairs to predict odor perception for blends of aroma-chemicals.
 
 ## Background/Introduction
@@ -23,7 +20,7 @@ For Task 2, we used a separate modeling strategy based on a fine-tuned pair-mode
 
 ## Methods
 ### Task 1
-** Feature Selection: ** We combined 1,827 Mordred descriptors and 2,049 hashed Morgan fingerprints, dropping constant columns. We appended task-specific features: (1) dilution scalars for both concentrations in an order encoding the prediction direction, and (2) one-hot direction flags. The known concentration’s rating vector was concatenated, yielding the feature layout: [descriptors, dil_1, dil_2, known ratings, flags].
+**Feature Selection:** We combined 1,827 Mordred descriptors and 2,049 hashed Morgan fingerprints, dropping constant columns. We appended task-specific features: (1) dilution scalars for both concentrations in an order encoding the prediction direction, and (2) one-hot direction flags. The known concentration’s rating vector was concatenated, yielding the feature layout: [descriptors, dil_1, dil_2, known ratings, flags].
 
 ** Model Training and Prediction: ** For each molecule with both High (H) and Low (L) odour profiles, we created two supervised pairs (H→L, L→H), doubling the sample size. We used 5-fold GroupKFold splitting to prevent H/L leakage between folds. A multi-output CatBoostRegressor was tuned with Optuna (TPE sampler, 40 trials, GPU backend), optimizing 1− r̄ (mean Pearson correlation). The best trial achieved mean Pearson r = 0.635 and cosine distance = 0.244. Parameters were frozen and the model refit on all training data; final test predictions were the average over the 5 folds. Output: a 51-dimensional odour rating vector.
 
@@ -36,7 +33,7 @@ For Task 2, we used a separate modeling strategy based on a fine-tuned pair-mode
 
 Molecules were converted to PyTorch Geometric graphs (Open Graph Benchmark utilities) and concatenated into a single disconnected graph per mixture. Fine-tuning data included the training dataset, leaderboard dataset, and a subset of Task 1 data. Concentrations were not included as inputs.
 
-** Model Training and Prediction: ** We initialized a new descriptor prediction head and trained with the loss: gamma * MSE + (1.0 - gamma) * cosine_distance. Early stopping (min_delta = 1e-4) prevented reaching the 500-epoch cap. Hyperparameters (learning rate, weight decay, warmup, xi, gamma, target caps, MLP flag) were tuned via Optuna with 3-fold ShuffleSplit, maximizing (Pearson – cosine distance). The best trial achieved mean Pearson r = 0.700 and cosine distance = 0.187. Final test predictions averaged over the 3 folds.
+**Model Training and Prediction:** We initialized a new descriptor prediction head and trained with the loss: gamma * MSE + (1.0 - gamma) * cosine_distance. Early stopping (min_delta = 1e-4) prevented reaching the 500-epoch cap. Hyperparameters (learning rate, weight decay, warmup, xi, gamma, target caps, MLP flag) were tuned via Optuna with 3-fold ShuffleSplit, maximizing (Pearson – cosine distance). The best trial achieved mean Pearson r = 0.700 and cosine distance = 0.187. Final test predictions averaged over the 3 folds.
 
 ## Conclusion/Discussion
 We approached the two tasks using different machine learning techniques.
