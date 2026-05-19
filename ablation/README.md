@@ -12,7 +12,7 @@ Everything else (Optuna hyperparameter tuning, 10-fold CV, data augmentation, en
 From the repo root:
 
 ```bash
-cd /Users/vs479/Desktop/Desktop/HNL/DREAMchallange/CollaboratioPhase/Manuscript_Final/PNAS/Ablation/CWYK-Olfboost-main
+cd /Ablation/CWYK-Olfboost-main
 ```
 
 ### 1. Train (10 seeds x 2 conditions)
@@ -35,7 +35,3 @@ Outputs saved to `final_results/`:
 - `Test_set_Submission_form_ensemble_class1.csv`
 - `Leaderboard_set_Submission_form_ensemble_class23.csv`
 - `Test_set_Submission_form_ensemble_class23.csv`
-
-### 3. Bootstrap analysis
-
-Open and run `final_results/bootstrap_ablation_analysis.ipynb`. Produces violin plots comparing bootstrap distributions (n=10,000) of RMSE and Pearson correlation across conditions and a shuffled baseline.
